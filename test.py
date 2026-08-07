@@ -1,8 +1,11 @@
-# broken_service.py — intentionally buggy for BLUEFIST sandbox testing
-
 def get_user_discount(order: dict) -> float:
-    # Bug 1: raw dict access — will KeyError if "customer" or "tier" missing
-    tier = order["customer"]["tier"]
+    customer = order.get("customer")
+    if not isinstance(customer, dict):
+        raise KeyError("Missing or invalid 'customer' data in order")
+    
+    tier = customer.get("tier")
+    if not isinstance(tier, str):
+        raise KeyError("Missing or invalid 'tier' in customer data")
 
     discounts = {
         "gold": 0.20,
@@ -10,28 +13,45 @@ def get_user_discount(order: dict) -> float:
         "bronze": 0.05,
     }
 
-    # Bug 2: raw dict access again — will KeyError on an unknown tier
-    return discounts[tier]
+    return discounts.get(tier, 0.0)
 
 
 def apply_discount(order: dict) -> float:
     discount = get_user_discount(order)
-    # Bug 3: no type coercion — "total" arrives as a string from the API
-    total = order["total"]
+    raw_total = order.get("total")
+    try:
+        total = float(raw_total)
+    except (TypeError, ValueError):
+        raise ValueError(f"Invalid total value: {raw_total}")
+        
     return total - (total * discount)
 
 
 def top_line_item(order: dict) -> str:
-    # Bug 4: unguarded index access on a possibly empty list
-    return order["items"][0]["name"]
+    items = order.get("items")
+    if not isinstance(items, list) or len(items) == 0:
+        return ""
+    
+    first_item = items[0]
+    if not isinstance(first_item, dict):
+        return ""
+        
+    return str(first_item.get("name", ""))
 
 
 if __name__ == "__main__":
     sample_order = {
-        "customer": {"tier": "platinum"},   # not in the discounts table
-        "total": "199.99",                   # string, not float
-        "items": [],                          # empty list
+        "customer": {"tier": "platinum"},
+        "total": "199.99",
+        "items": [],
     }
 
-    print("Discounted total:", apply_discount(sample_order))
-    print("Top item:", top_line_item(sample_order))
+    try:
+        print("Discounted total:", apply_discount(sample_order))
+    except Exception as e:
+        print(f"Error calculating discount: {e}")
+
+    try:
+        print("Top item:", top_line_item(sample_order))
+    except Exception as e:
+        print(f"Error retrieving top item: {e}")
